@@ -1,254 +1,148 @@
-// =========================================================================
-// 1. BACKEND API CONFIGURATION
-// =========================================================================
-
-const API_BASE_URL = "/api";
-// DOM Elements
-const authScreen = document.getElementById("auth-screen");
-const appDashboard = document.getElementById("app-dashboard");
-
-const loginForm = document.getElementById("login-form");
-const signupForm = document.getElementById("signup-form");
-const logoutBtn = document.getElementById("logout-btn");
-const userDisplayName = document.getElementById("user-display-name");
-
-const noteTitleInput = document.getElementById("note-title");
-const noteContentInput = document.getElementById("note-content");
-const addNoteBtn = document.getElementById("add-note-btn");
-const searchInput = document.getElementById("search-input");
-const notesGrid = document.getElementById("notes-grid");
-
-let allNotes = [];
-let selectedNoteColor = "#1e293b";
-
-// =========================================================================
-// 2. APP INITIALIZATION & AUTH CHECK
-// =========================================================================
-document.addEventListener("DOMContentLoaded", () => {
-  checkAuthSession();
+document.addEventListener('DOMContentLoaded', () => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    showNotesApp();
+  } else {
+    showAuth();
+  }
 });
 
-function checkAuthSession() {
-  const token = localStorage.getItem("token");
-  const userName = localStorage.getItem("userName");
-
-  if (token && userName) {
-    userDisplayName.textContent = `Welcome, ${userName}`;
-    authScreen.classList.add("hidden");
-    appDashboard.classList.remove("hidden");
-    fetchNotes();
-  } else {
-    appDashboard.classList.add("hidden");
-    authScreen.classList.remove("hidden");
-  }
+// Navigation Views
+function showAuth() {
+  document.getElementById('auth-container').classList.remove('hidden');
+  document.getElementById('notes-container').style.display = 'none';
+  document.getElementById('logout-btn').style.display = 'none';
 }
 
-// =========================================================================
-// 3. AUTHENTICATION (SIGN UP, LOGIN, LOGOUT)
-// =========================================================================
+function showNotesApp() {
+  document.getElementById('auth-container').classList.add('hidden');
+  document.getElementById('notes-container').style.display = 'block';
+  document.getElementById('logout-btn').style.display = 'inline-block';
+  loadNotes();
+}
 
-// Sign Up
-signupForm.addEventListener("submit", async (e) => {
+// User Sign Up
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const name = document.getElementById("signup-name").value.trim();
-  const email = document.getElementById("signup-email").value.trim();
-  const dob = document.getElementById("signup-dob").value;
-  const password = document.getElementById("signup-password").value;
+  const name = document.getElementById('signup-name').value;
+  const email = document.getElementById('signup-email').value;
+  const dob = document.getElementById('signup-dob').value;
+  const password = document.getElementById('signup-password').value;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, dob, password })
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Sign up failed.");
-
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("userName", data.user.full_name);
-
-    signupForm.reset();
-    checkAuthSession();
+    if (res.ok) {
+      localStorage.setItem('token', data.token);
+      showNotesApp();
+    } else {
+      alert(data.error);
+    }
   } catch (err) {
-    alert(`Registration Error: ${err.message}`);
+    alert('Signup error: ' + err.message);
   }
 });
 
-// Log In
-loginForm.addEventListener("submit", async (e) => {
+// User Login
+document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById("login-email").value.trim();
-  const password = document.getElementById("login-password").value;
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Login failed.");
-
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("userName", data.user.full_name);
-
-    loginForm.reset();
-    checkAuthSession();
-  } catch (err) {
-    alert(`Login Error: ${err.message}`);
-  }
-});
-
-// Log Out
-logoutBtn.addEventListener("click", () => {
-  localStorage.removeItem("token");
-  localStorage.removeItem("userName");
-  allNotes = [];
-  checkAuthSession();
-});
-
-// Tab Switcher
-window.switchTab = function(tab) {
-  const loginF = document.getElementById("login-form");
-  const signupF = document.getElementById("signup-form");
-  const tabLogin = document.getElementById("tab-login");
-  const tabSignup = document.getElementById("tab-signup");
-
-  if (tab === "login") {
-    loginF.classList.remove("hidden");
-    signupF.classList.add("hidden");
-    tabLogin.classList.add("active");
-    tabSignup.classList.remove("active");
-  } else {
-    signupF.classList.remove("hidden");
-    loginF.classList.add("hidden");
-    tabSignup.classList.add("active");
-    tabLogin.classList.remove("active");
-  }
-};
-
-// =========================================================================
-// 4. NOTES MANAGEMENT (FETCH, ADD, PIN, DELETE)
-// =========================================================================
-
-function getAuthHeaders() {
-  return {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${localStorage.getItem("token")}`
-  };
-}
-
-async function fetchNotes() {
-  try {
-    const res = await fetch(`${API_BASE_URL}/notes`, {
-      headers: getAuthHeaders()
-    });
-
-    if (res.status === 401 || res.status === 403) {
-      logoutBtn.click();
-      return;
+    if (res.ok) {
+      localStorage.setItem('token', data.token);
+      showNotesApp();
+    } else {
+      alert(data.error);
     }
-
-    allNotes = await res.json();
-    renderNotes(allNotes);
   } catch (err) {
-    console.error("Failed to load notes:", err);
+    alert('Login error: ' + err.message);
+  }
+});
+
+// Logout
+document.getElementById('logout-btn').addEventListener('click', () => {
+  localStorage.removeItem('token');
+  showAuth();
+});
+
+// Load Notes from API
+async function loadNotes() {
+  const token = localStorage.getItem('token');
+  try {
+    const res = await fetch('/api/notes', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const notes = await res.json();
+
+    if (res.ok) {
+      renderNotes(notes);
+    } else if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem('token');
+      showAuth();
+    }
+  } catch (err) {
+    console.error("Error loading notes:", err);
   }
 }
 
-addNoteBtn.addEventListener("click", async () => {
-  const title = noteTitleInput.value.trim();
-  const content = noteContentInput.value.trim();
+// Render Note Cards in UI
+function renderNotes(notes) {
+  const grid = document.getElementById('notes-grid');
+  grid.innerHTML = '';
 
-  if (!title && !content) {
-    alert("Please enter a title or note content!");
+  if (!notes || notes.length === 0) {
+    grid.innerHTML = '<p style="color: #94a3b8; grid-column: 1/-1;">No notes yet. Create your first note above!</p>';
     return;
   }
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/notes`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        title: title || "Untitled Note",
-        content: content,
-        color: selectedNoteColor
-      })
-    });
+  notes.forEach(note => {
+    const card = document.createElement('div');
+    card.className = 'note-card';
+    card.style.backgroundColor = note.color || '#1e293b';
 
-    if (!res.ok) throw new Error("Failed to save note.");
-
-    noteTitleInput.value = "";
-    noteContentInput.value = "";
-    resetColorSelection();
-    fetchNotes();
-  } catch (err) {
-    alert(err.message);
-  }
-});
-
-window.togglePinNote = async (noteId, currentStatus) => {
-  try {
-    await fetch(`${API_BASE_URL}/notes/${noteId}/pin`, {
-      method: "PATCH",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ is_pinned: !currentStatus })
-    });
-    fetchNotes();
-  } catch (err) {
-    console.error("Pin error:", err);
-  }
-};
-
-window.deleteNote = async (noteId) => {
-  if (confirm("Are you sure you want to delete this note?")) {
-    try {
-      await fetch(`${API_BASE_URL}/notes/${noteId}`, {
-        method: "DELETE",
-        headers: getAuthHeaders()
-      });
-      fetchNotes();
-    } catch (err) {
-      alert("Delete failed: " + err.message);
+    // File / Image Attachment Preview
+    let attachmentHtml = '';
+    if (note.file_url) {
+      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(note.file_url);
+      if (isImage) {
+        attachmentHtml = `<div class="note-attachment"><img src="${note.file_url}" alt="Attachment" /></div>`;
+      } else {
+        attachmentHtml = `<div class="note-attachment"><a href="${note.file_url}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-paperclip"></i> View Attachment</a></div>`;
+      }
     }
-  }
-};
 
-// =========================================================================
-// 5. UI HELPERS & SEARCH
-// =========================================================================
+    // Date formatting
+    const formattedDate = note.created_at 
+      ? new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
 
-function renderNotes(notesToDisplay) {
-  notesGrid.innerHTML = "";
-
-  if (notesToDisplay.length === 0) {
-    notesGrid.innerHTML = `<p style="color: var(--text-muted); grid-column: 1/-1;">No notes saved yet.</p>`;
-    return;
-  }
-
-  notesToDisplay.forEach(note => {
-    const noteCard = document.createElement("div");
-    noteCard.className = "note-card";
-    noteCard.style.backgroundColor = note.color || "#1e293b";
-
-    const dateStr = note.created_at
-      ? new Date(note.created_at).toLocaleDateString()
-      : "Just now";
-
-    noteCard.innerHTML = `
+    card.innerHTML = `
       <div>
         <div class="note-card-header">
-          <h4>${escapeHTML(note.title)}</h4>
-          <button class="pin-btn ${note.is_pinned ? 'active' : ''}" onclick="togglePinNote(${note.id}, ${note.is_pinned})">
+          <h4>${note.title}</h4>
+          <button class="pin-btn ${note.is_pinned ? 'pinned' : ''}" onclick="togglePin(${note.id}, ${!note.is_pinned})">
             <i class="fa-solid fa-thumbtack"></i>
           </button>
         </div>
-        <p>${escapeHTML(note.content)}</p>
+        <p>${note.content || ''}</p>
+        ${attachmentHtml}
       </div>
       <div class="note-card-footer">
-        <span class="note-date">${dateStr}</span>
+        <span class="note-date">${formattedDate}</span>
         <div class="note-actions">
           <button class="icon-btn danger" onclick="deleteNote(${note.id})">
             <i class="fa-solid fa-trash"></i>
@@ -257,38 +151,69 @@ function renderNotes(notesToDisplay) {
       </div>
     `;
 
-    notesGrid.appendChild(noteCard);
+    grid.appendChild(card);
   });
 }
 
-searchInput.addEventListener("input", (e) => {
-  const searchTerm = e.target.value.toLowerCase();
-  const filtered = allNotes.filter(n =>
-    n.title.toLowerCase().includes(searchTerm) ||
-    (n.content && n.content.toLowerCase().includes(searchTerm))
-  );
-  renderNotes(filtered);
-});
+// Save Note with File Attachment
+document.getElementById('note-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
 
-document.querySelectorAll(".color-dot").forEach(dot => {
-  dot.addEventListener("click", (e) => {
-    document.querySelectorAll(".color-dot").forEach(d => d.classList.remove("active"));
-    e.target.classList.add("active");
-    selectedNoteColor = e.target.dataset.color;
-  });
-});
+  const formData = new FormData();
+  formData.append('title', document.getElementById('note-title').value);
+  formData.append('content', document.getElementById('note-content').value);
+  formData.append('color', document.getElementById('note-color').value);
 
-function resetColorSelection() {
-  document.querySelectorAll(".color-dot").forEach(d => d.classList.remove("active"));
-  const defaultDot = document.querySelector(".color-dot.default");
-  if (defaultDot) {
-    defaultDot.classList.add("active");
-    selectedNoteColor = defaultDot.dataset.color;
+  const fileInput = document.getElementById('note-file');
+  if (fileInput && fileInput.files[0]) {
+    formData.append('attachment', fileInput.files[0]);
   }
+
+  const token = localStorage.getItem('token');
+
+  try {
+    const res = await fetch('/api/notes', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    });
+
+    if (res.ok) {
+      document.getElementById('note-form').reset();
+      document.getElementById('note-color').value = '#1e293b';
+      loadNotes();
+    } else {
+      const err = await res.json();
+      alert('Failed to save note: ' + err.error);
+    }
+  } catch (err) {
+    alert('Error saving note: ' + err.message);
+  }
+});
+
+// Toggle Pin Status
+async function togglePin(id, is_pinned) {
+  const token = localStorage.getItem('token');
+  await fetch(`/api/notes/${id}/pin`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ is_pinned })
+  });
+  loadNotes();
 }
 
-function escapeHTML(str) {
-  return (str || "").replace(/[&<>'"]/g,
-    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-  );
+// Delete Note
+async function deleteNote(id) {
+  if (!confirm('Are you sure you want to delete this note?')) return;
+  const token = localStorage.getItem('token');
+  await fetch(`/api/notes/${id}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  loadNotes();
 }
