@@ -164,6 +164,16 @@ app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// --- ADMIN / USER LIST ENDPOINT ---
+app.get('/api/users-list', async (req, res) => {
+  try {
+    const users = await pool.query('SELECT id, full_name, email, created_at FROM users ORDER BY id DESC');
+    res.json(users.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch users: " + err.message });
+  }
+});
+
 // Serve index.html for root requests
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
