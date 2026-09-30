@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Navigation Views
+// View Controllers
 function showAuth() {
   document.getElementById('auth-container').classList.remove('hidden');
   document.getElementById('notes-container').style.display = 'none';
@@ -17,7 +17,7 @@ function showAuth() {
 function showNotesApp() {
   document.getElementById('auth-container').classList.add('hidden');
   document.getElementById('notes-container').style.display = 'block';
-  document.getElementById('logout-btn').style.display = 'inline-block';
+  document.getElementById('logout-btn').style.display = 'flex';
   loadNotes();
 }
 
@@ -79,7 +79,7 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   showAuth();
 });
 
-// Load Notes from API
+// Load Notes
 async function loadNotes() {
   const token = localStorage.getItem('token');
   try {
@@ -99,13 +99,13 @@ async function loadNotes() {
   }
 }
 
-// Render Note Cards in UI
+// Render Notes
 function renderNotes(notes) {
   const grid = document.getElementById('notes-grid');
   grid.innerHTML = '';
 
   if (!notes || notes.length === 0) {
-    grid.innerHTML = '<p style="color: #94a3b8; grid-column: 1/-1;">No notes yet. Create your first note above!</p>';
+    grid.innerHTML = '<div style="text-align: center; color: #64748b; padding: 40px 0;"><i class="fa-regular fa-folder-open" style="font-size: 32px; margin-bottom: 12px;"></i><p>No notes found. Create your first note above!</p></div>';
     return;
   }
 
@@ -114,18 +114,33 @@ function renderNotes(notes) {
     card.className = 'note-card';
     card.style.backgroundColor = note.color || '#1e293b';
 
-    // File / Image Attachment Preview
+    // File Attachment Logic (Images, Code Files, Documents)
     let attachmentHtml = '';
     if (note.file_url) {
       const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(note.file_url);
+      const isCode = /\.(py|c|cpp|cs|js|jsx|ts|tsx|java|html|css|json|sql|sh|rb|php|go|rs|txt)$/i.test(note.file_url);
+
       if (isImage) {
         attachmentHtml = `<div class="note-attachment"><img src="${note.file_url}" alt="Attachment" /></div>`;
+      } else if (isCode) {
+        const fileName = note.file_url.split('/').pop();
+        attachmentHtml = `
+          <div class="note-attachment">
+            <a href="${note.file_url}" target="_blank" download class="attachment-badge">
+              <i class="fa-solid fa-code"></i> View / Download Code File (${fileName})
+            </a>
+          </div>`;
       } else {
-        attachmentHtml = `<div class="note-attachment"><a href="${note.file_url}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-paperclip"></i> View Attachment</a></div>`;
+        attachmentHtml = `
+          <div class="note-attachment">
+            <a href="${note.file_url}" target="_blank" class="attachment-badge">
+              <i class="fa-solid fa-file-lines"></i> View Document Attachment
+            </a>
+          </div>`;
       }
     }
 
-    // Date formatting
+    // Date Format
     const formattedDate = note.created_at 
       ? new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : '';
@@ -145,7 +160,7 @@ function renderNotes(notes) {
         <span class="note-date">${formattedDate}</span>
         <div class="note-actions">
           <button class="icon-btn danger" onclick="deleteNote(${note.id})">
-            <i class="fa-solid fa-trash"></i>
+            <i class="fa-solid fa-trash-can"></i>
           </button>
         </div>
       </div>
@@ -155,7 +170,7 @@ function renderNotes(notes) {
   });
 }
 
-// Save Note with File Attachment
+// Save Note with File
 document.getElementById('note-form').addEventListener('submit', async (e) => {
   e.preventDefault();
 
@@ -193,7 +208,7 @@ document.getElementById('note-form').addEventListener('submit', async (e) => {
   }
 });
 
-// Toggle Pin Status
+// Toggle Pin
 async function togglePin(id, is_pinned) {
   const token = localStorage.getItem('token');
   await fetch(`/api/notes/${id}/pin`, {
