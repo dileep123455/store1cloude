@@ -3,169 +3,101 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CloudNotes - Sync Notes Across Devices</title>
-  <!-- Google Fonts & Font Awesome Icons -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>CloudNotes</title>
+  <!-- FontAwesome for icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- ================= AUTHENTICATION CONTAINER ================= -->
-  <div id="auth-screen" class="auth-wrapper">
-    <div class="auth-card">
-      <div class="auth-header">
-        <i class="fa-solid fa-note-sticky logo-icon"></i>
-        <h2>CloudNotes</h2>
-        <p>Keep your notes in sync across all your devices</p>
-      </div>
+  <header class="app-header">
+    <h1>CloudNotes</h1>
+    <button id="logout-btn" class="btn-secondary" style="display: none;">
+      <i class="fa-solid fa-right-from-bracket"></i> Logout
+    </button>
+  </header>
 
-      <!-- Auth Tabs -->
+  <main class="main-content">
+    
+    <!-- Authentication Card (Login / Signup) -->
+    <div id="auth-container" class="card auth-card">
       <div class="auth-tabs">
-        <button id="tab-login" class="tab-btn active" onclick="switchTab('login')">Log In</button>
-        <button id="tab-signup" class="tab-btn" onclick="switchTab('signup')">Create Account</button>
+        <button id="tab-login" class="tab-btn active" onclick="switchTab('login')">Login</button>
+        <button id="tab-signup" class="tab-btn" onclick="switchTab('signup')">Sign Up</button>
       </div>
 
-      <!-- Google Sign-In Button -->
-      <button class="google-btn" id="google-login-btn">
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google Logo" />
-        <span>Continue with Google</span>
-      </button>
-
-      <div class="divider">
-        <span>OR</span>
-      </div>
-
-      <!-- LOGIN FORM -->
-      <form id="login-form" class="auth-form">
+      <!-- Login Form -->
+      <form id="login-form">
         <div class="form-group">
-          <label for="login-email">Email Address</label>
-          <input type="email" id="login-email" placeholder="name@example.com" required />
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" required placeholder="Enter email" />
         </div>
         <div class="form-group">
           <label for="login-password">Password</label>
-          <input type="password" id="login-password" placeholder="••••••••" required />
+          <input type="password" id="login-password" required placeholder="Enter password" />
         </div>
-        <button type="submit" class="primary-btn">Log In</button>
+        <button type="submit" class="btn-primary">Login</button>
       </form>
 
-      <!-- SIGN UP FORM -->
-      <form id="signup-form" class="auth-form hidden">
+      <!-- Signup Form -->
+      <form id="signup-form" class="hidden">
         <div class="form-group">
           <label for="signup-name">Full Name</label>
-          <input type="text" id="signup-name" placeholder="John Doe" required />
+          <input type="text" id="signup-name" required placeholder="Enter full name" />
         </div>
         <div class="form-group">
-          <label for="signup-email">Email Address</label>
-          <input type="email" id="signup-email" placeholder="name@example.com" required />
+          <label for="signup-email">Email</label>
+          <input type="email" id="signup-email" required placeholder="Enter email" />
         </div>
         <div class="form-group">
           <label for="signup-dob">Date of Birth</label>
-          <input type="date" id="signup-dob" required />
+          <input type="date" id="signup-dob" />
         </div>
         <div class="form-group">
           <label for="signup-password">Password</label>
-          <input type="password" id="signup-password" placeholder="Create a password" required />
+          <input type="password" id="signup-password" required placeholder="Create password" />
         </div>
-        <button type="submit" class="primary-btn">Create Account</button>
+        <button type="submit" class="btn-primary">Sign Up</button>
       </form>
-
     </div>
-  </div>
 
-
-  <!-- ================= NOTES DASHBOARD CONTAINER ================= -->
-  <div id="app-dashboard" class="dashboard-wrapper hidden">
-    
-    <!-- Top Navigation Bar -->
-    <header class="navbar">
-      <div class="nav-brand">
-        <i class="fa-solid fa-note-sticky"></i>
-        <span>CloudNotes</span>
-      </div>
-      <div class="nav-user">
-        <span id="user-display-name">Welcome, User</span>
-        <button id="logout-btn" class="logout-btn">
-          <i class="fa-solid fa-right-from-bracket"></i> Logout
-        </button>
-      </div>
-    </header>
-
-    <!-- Main Content Area -->
-    <main class="main-container">
-
-      <!-- Search & Filters -->
-      <section class="controls-bar">
-        <div class="search-box">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" id="search-input" placeholder="Search notes..." />
-        </div>
-      </section>
-
-      <!-- Create New Note Card -->
-      <section class="create-note-card">
-        <input type="text" id="note-title" placeholder="Title" class="note-title-input" />
-        <textarea id="note-content" placeholder="Take a note..." rows="3" class="note-content-input"></textarea>
-        
-        <div class="note-card-actions">
-          <div class="color-picker">
-            <span class="color-dot default active" data-color="#ffffff"></span>
-            <span class="color-dot red" data-color="#fef2f2"></span>
-            <span class="color-dot yellow" data-color="#fefce8"></span>
-            <span class="color-dot green" data-color="#f0fdf4"></span>
-            <span class="color-dot blue" data-color="#eff6ff"></span>
-            <span class="color-dot purple" data-color="#faf5ff"></span>
+    <!-- Notes App Workspace -->
+    <section id="notes-container" style="display: none;">
+      <!-- Note Creation Card -->
+      <div class="card create-note-card">
+        <h3><i class="fa-solid fa-pen-to-square"></i> Create Note</h3>
+        <form id="note-form">
+          <div class="form-group">
+            <input type="text" id="note-title" placeholder="Title" required />
           </div>
-          <button id="add-note-btn" class="add-btn">
-            <i class="fa-solid fa-plus"></i> Save Note
-          </button>
-        </div>
-      </section>
+          <div class="form-group">
+            <textarea id="note-content" placeholder="Take a note..." rows="3"></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="note-color">Color:</label>
+              <input type="color" id="note-color" value="#1e293b" />
+            </div>
+
+            <!-- File Attachment Field -->
+            <div class="form-group file-group">
+              <label for="note-file"><i class="fa-solid fa-paperclip"></i> Attach File / Image:</label>
+              <input type="file" id="note-file" accept="image/*,.pdf,.doc,.docx" />
+            </div>
+          </div>
+
+          <button type="submit" class="btn-primary">Save Note</button>
+        </form>
+      </div>
 
       <!-- Notes Grid -->
-      <section class="notes-grid-section">
-        <h3>Your Saved Notes</h3>
-        <div id="notes-grid" class="notes-grid">
-          
-          <!-- Example Note Item 1 -->
-          <div class="note-card" style="background-color: #f0fdf4;">
-            <div class="note-card-header">
-              <h4>Project Ideas</h4>
-              <button class="pin-btn active"><i class="fa-solid fa-thumbtack"></i></button>
-            </div>
-            <p>Build a cross-device notes web application using Firebase Firestore.</p>
-            <div class="note-card-footer">
-              <span class="note-date">May 24, 2026</span>
-              <div class="note-actions">
-                <button class="icon-btn danger"><i class="fa-solid fa-trash"></i></button>
-              </div>
-            </div>
-          </div>
+      <div id="notes-grid" class="notes-grid"></div>
+    </section>
 
-          <!-- Example Note Item 2 -->
-          <div class="note-card" style="background-color: #fefce8;">
-            <div class="note-card-header">
-              <h4>Shopping List</h4>
-              <button class="pin-btn"><i class="fa-solid fa-thumbtack"></i></button>
-            </div>
-            <p>1. Apples<br>2. Milk<br>3. Bread<br>4. Coffee beans</p>
-            <div class="note-card-footer">
-              <span class="note-date">May 22, 2026</span>
-              <div class="note-actions">
-                <button class="icon-btn danger"><i class="fa-solid fa-trash"></i></button>
-              </div>
-            </div>
-          </div>
+  </main>
 
-        </div>
-      </section>
-
-    </main>
-  </div>
-
-  <!-- Inline UI Switch Script (For Testing Display) -->
+  <!-- Tab Switcher Utility Script -->
   <script>
     function switchTab(tab) {
       const loginForm = document.getElementById('login-form');
@@ -186,7 +118,9 @@
       }
     }
   </script>
-  <!-- Link external JavaScript file -->
-  <script type="module" src="script.js"></script>
+
+  <!-- Main JavaScript App Logic -->
+  <script src="script.js"></script>
+
 </body>
 </html>
