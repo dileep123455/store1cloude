@@ -22,7 +22,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Initialize Database Tables
+// Initialize Database Tables & Migration
 const initDb = async () => {
   try {
     await pool.query(`
@@ -30,10 +30,12 @@ const initDb = async () => {
         id SERIAL PRIMARY KEY,
         full_name VARCHAR(100) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
-        dob DATE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      -- Auto-add 'dob' column if table was created earlier without it
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS dob DATE;
 
       CREATE TABLE IF NOT EXISTS notes (
         id SERIAL PRIMARY KEY,
@@ -74,15 +76,15 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: "User already exists with this email." });
     }
 
-    // Format date string to valid YYYY-MM-DD for PostgreSQL
-    const formattedDob = new Date(dob).toISOString().split('T')[0];
-
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
+    // Use provided dob or fallback to NULL
+    const userDob = dob && dob.trim() !== '' ? dob : null;
+
     const newUser = await pool.query(
       'INSERT INTO users (full_name, email, dob, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, full_name, email',
-      [name, email, formattedDob, passwordHash]
+      [name, email, userDob, passwordHash]
     );
 
     const user = newUser.rows[0];
@@ -178,13 +180,14 @@ app.get('/api/users-list', async (req, res) => {
   }
 
   try {
-    const users = await pool.query('SELECT id, full_name, email, created_at FROM users ORDER BY id DESC');
+    const users = await pool.query('SELECT id, full_name, email, dob, created_at FROM users ORDER BY id DESC');
     
     let rows = users.rows.map(user => `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.id}</td>
         <td style="padding: 12px; border-bottom: 1px solid #334155; font-weight: 600;">${user.full_name}</td>
         <td style="padding: 12px; border-bottom: 1px solid #334155; color: #38bdf8;">${user.email}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #a7f3d0;">${user.dob ? new Date(user.dob).toLocaleDateString() : 'N/A'}</td>
         <td style="padding: 12px; border-bottom: 1px solid #334155; color: #94a3b8;">${new Date(user.created_at).toLocaleString()}</td>
       </tr>
     `).join('');
@@ -214,11 +217,12 @@ app.get('/api/users-list', async (req, res) => {
                 <th>ID</th>
                 <th>Full Name</th>
                 <th>Email</th>
+                <th>DOB</th>
                 <th>Joined Date</th>
               </tr>
             </thead>
             <tbody>
-              ${rows || '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #94a3b8;">No registered users found.</td></tr>'}
+              ${rows || '<tr><td colspan="5" style="padding: 20px; text-align: center; color: #94a3b8;">No registered users found.</td></tr>'}
             </tbody>
           </table>
         </div>
