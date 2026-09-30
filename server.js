@@ -74,12 +74,15 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: "User already exists with this email." });
     }
 
+    // Format date string to valid YYYY-MM-DD for PostgreSQL
+    const formattedDob = new Date(dob).toISOString().split('T')[0];
+
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
     const newUser = await pool.query(
       'INSERT INTO users (full_name, email, dob, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, full_name, email',
-      [name, email, dob, passwordHash]
+      [name, email, formattedDob, passwordHash]
     );
 
     const user = newUser.rows[0];
@@ -87,7 +90,8 @@ app.post('/api/auth/signup', async (req, res) => {
 
     res.json({ message: "Registration successful!", token, user });
   } catch (err) {
-    res.status(500).json({ error: "Server error during signup." });
+    console.error("Signup error details:", err);
+    res.status(500).json({ error: "Server error during signup: " + err.message });
   }
 });
 
