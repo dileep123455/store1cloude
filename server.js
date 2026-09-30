@@ -164,13 +164,67 @@ app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// --- ADMIN / USER LIST ENDPOINT ---
+// --- SECURED ADMIN / USER LIST ENDPOINT ---
 app.get('/api/users-list', async (req, res) => {
+  const adminKey = req.query.key;
+  const SECRET_ADMIN_KEY = process.env.ADMIN_KEY || 'mysecretadmin123';
+
+  if (adminKey !== SECRET_ADMIN_KEY) {
+    return res.status(403).send('<h2 style="color: red; font-family: sans-serif; text-align: center; margin-top: 50px;">403 Access Denied: Unauthorized</h2>');
+  }
+
   try {
     const users = await pool.query('SELECT id, full_name, email, created_at FROM users ORDER BY id DESC');
-    res.json(users.rows);
+    
+    let rows = users.rows.map(user => `
+      <tr>
+        <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.id}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155; font-weight: 600;">${user.full_name}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #38bdf8;">${user.email}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #94a3b8;">${new Date(user.created_at).toLocaleString()}</td>
+      </tr>
+    `).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>CloudNotes - Admin User Directory</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; margin: 0; }
+          .container { max-width: 900px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+          h1 { margin-top: 0; color: #f8fafc; font-size: 24px; border-bottom: 2px solid #334155; padding-bottom: 15px; }
+          table { width: 100%; border-collapse: collapse; text-align: left; margin-top: 20px; }
+          th { padding: 12px; background: #334155; color: #94a3b8; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
+          tr:hover { background: #283548; }
+          .badge { background: #0284c7; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; float: right; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Registered Users <span class="badge">Total: ${users.rows.length}</span></h1>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>Joined Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #94a3b8;">No registered users found.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </body>
+      </html>
+    `;
+
+    res.send(html);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch users: " + err.message });
+    res.status(500).send(`<h2 style="color: red; font-family: sans-serif;">Error fetching users: ${err.message}</h2>`);
   }
 });
 
