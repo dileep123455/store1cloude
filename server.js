@@ -4,16 +4,31 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const path = require('path');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Serve static frontend files (index.html, style.css, script.js)
+// Serve static frontend files
 app.use(express.static(path.join(__dirname)));
 
-// Secret key for JWT
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Configure Multer for memory storage (10MB file limit)
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
 
 // PostgreSQL Connection
@@ -22,7 +37,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Initialize Database Tables & Migration
+// Initialize Database Tables
 const initDb = async () => {
   try {
     await pool.query(`
@@ -34,7 +49,6 @@ const initDb = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- Auto-add 'dob' column if table was created earlier without it
       ALTER TABLE users ADD COLUMN IF NOT EXISTS dob DATE;
 
       CREATE TABLE IF NOT EXISTS notes (
@@ -46,10 +60,12 @@ const initDb = async () => {
         is_pinned BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      ALTER TABLE notes ADD COLUMN IF NOT EXISTS file_url TEXT;
     `);
-    console.log("Database tables initialized successfully.");
+    console.log("Database initialized successfully.");
   } catch (err) {
-    console.error("Error initializing database:", err);
+    console.error("Database init error:", err);
   }
 };
 initDb();
@@ -78,8 +94,6 @@ app.post('/api/auth/signup', async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
-
-    // Use provided dob or fallback to NULL
     const userDob = dob && dob.trim() !== '' ? dob : null;
 
     const newUser = await pool.query(
@@ -92,7 +106,6 @@ app.post('/api/auth/signup', async (req, res) => {
 
     res.json({ message: "Registration successful!", token, user });
   } catch (err) {
-    console.error("Signup error details:", err);
     res.status(500).json({ error: "Server error during signup: " + err.message });
   }
 });
@@ -136,16 +149,34 @@ app.get('/api/notes', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/notes', authenticateToken, async (req, res) => {
+// Create Note with Optional Cloudinary Upload
+app.post('/api/notes', authenticateToken, upload.single('attachment'), async (req, res) => {
   const { title, content, color } = req.body;
+  let fileUrl = null;
+
   try {
+    if (req.file) {
+      fileUrl = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "cloudnotes_attachments", resource_type: "auto" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result.secure_url);
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+    }
+
     const newNote = await pool.query(
-      'INSERT INTO notes (user_id, title, content, color) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.user.userId, title, content, color || '#1e293b']
+      'INSERT INTO notes (user_id, title, content, color, file_url) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.user.userId, title, content, color || '#1e293b', fileUrl]
     );
+
     res.json(newNote.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: "Failed to create note." });
+    console.error("Save note error:", err);
+    res.status(500).json({ error: "Failed to save note: " + err.message });
   }
 });
 
@@ -170,73 +201,33 @@ app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// --- SECURED ADMIN / USER LIST ENDPOINT ---
+// Admin User Listing
 app.get('/api/users-list', async (req, res) => {
   const adminKey = req.query.key;
   const SECRET_ADMIN_KEY = process.env.ADMIN_KEY || 'mysecretadmin123';
 
   if (adminKey !== SECRET_ADMIN_KEY) {
-    return res.status(403).send('<h2 style="color: red; font-family: sans-serif; text-align: center; margin-top: 50px;">403 Access Denied: Unauthorized</h2>');
+    return res.status(403).send('<h2 style="color: red; text-align: center; margin-top: 50px;">403 Access Denied</h2>');
   }
 
   try {
     const users = await pool.query('SELECT id, full_name, email, dob, created_at FROM users ORDER BY id DESC');
-    
     let rows = users.rows.map(user => `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.id}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155; font-weight: 600;">${user.full_name}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #38bdf8;">${user.email}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #a7f3d0;">${user.dob ? new Date(user.dob).toLocaleDateString() : 'N/A'}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #94a3b8;">${new Date(user.created_at).toLocaleString()}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.full_name}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.email}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.dob ? new Date(user.dob).toLocaleDateString() : 'N/A'}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155;">${new Date(user.created_at).toLocaleString()}</td>
       </tr>
     `).join('');
 
-    const html = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>CloudNotes - Admin User Directory</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; margin: 0; }
-          .container { max-width: 900px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-          h1 { margin-top: 0; color: #f8fafc; font-size: 24px; border-bottom: 2px solid #334155; padding-bottom: 15px; }
-          table { width: 100%; border-collapse: collapse; text-align: left; margin-top: 20px; }
-          th { padding: 12px; background: #334155; color: #94a3b8; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
-          tr:hover { background: #283548; }
-          .badge { background: #0284c7; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; float: right; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>Registered Users <span class="badge">Total: ${users.rows.length}</span></h1>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Full Name</th>
-                <th>Email</th>
-                <th>DOB</th>
-                <th>Joined Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows || '<tr><td colspan="5" style="padding: 20px; text-align: center; color: #94a3b8;">No registered users found.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-      </body>
-      </html>
-    `;
-
-    res.send(html);
+    res.send(`<html><body style="background:#0f172a;color:#fff;padding:40px;"><h2>Registered Users</h2><table border="1" style="width:100%;border-collapse:collapse;">${rows}</table></body></html>`);
   } catch (err) {
-    res.status(500).send(`<h2 style="color: red; font-family: sans-serif;">Error fetching users: ${err.message}</h2>`);
+    res.status(500).send("Error: " + err.message);
   }
 });
 
-// Serve index.html for root requests
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
