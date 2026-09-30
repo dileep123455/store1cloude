@@ -15,14 +15,14 @@ app.use(cors());
 // Serve static frontend files
 app.use(express.static(path.join(__dirname)));
 
-// Configure Cloudinary
+// Configure Cloudinary Credentials
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Configure Multer for memory storage (10MB file limit)
+// Configure Multer Memory Storage with 10MB upload limit
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
@@ -31,13 +31,13 @@ const upload = multer({
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
 
-// PostgreSQL Connection
+// PostgreSQL Pool Connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Initialize Database Tables
+// Initialize Database Tables & Migration
 const initDb = async () => {
   try {
     await pool.query(`
@@ -63,14 +63,14 @@ const initDb = async () => {
 
       ALTER TABLE notes ADD COLUMN IF NOT EXISTS file_url TEXT;
     `);
-    console.log("Database initialized successfully.");
+    console.log("Database initialized successfully with file attachment support.");
   } catch (err) {
-    console.error("Database init error:", err);
+    console.error("Database initialization error:", err);
   }
 };
 initDb();
 
-// JWT Middleware
+// JWT Authentication Middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -106,6 +106,7 @@ app.post('/api/auth/signup', async (req, res) => {
 
     res.json({ message: "Registration successful!", token, user });
   } catch (err) {
+    console.error("Signup error:", err);
     res.status(500).json({ error: "Server error during signup: " + err.message });
   }
 });
@@ -132,6 +133,7 @@ app.post('/api/auth/login', async (req, res) => {
       user: { id: user.id, full_name: user.full_name, email: user.email }
     });
   } catch (err) {
+    console.error("Login error:", err);
     res.status(500).json({ error: "Server error during login." });
   }
 });
@@ -145,11 +147,12 @@ app.get('/api/notes', authenticateToken, async (req, res) => {
     );
     res.json(notes.rows);
   } catch (err) {
+    console.error("Fetch notes error:", err);
     res.status(500).json({ error: "Failed to fetch notes." });
   }
 });
 
-// Create Note with Optional Cloudinary Upload
+// Create Note with Cloudinary Upload Stream (Supports Images, PDFs & Documents)
 app.post('/api/notes', authenticateToken, upload.single('attachment'), async (req, res) => {
   const { title, content, color } = req.body;
   let fileUrl = null;
@@ -158,7 +161,11 @@ app.post('/api/notes', authenticateToken, upload.single('attachment'), async (re
     if (req.file) {
       fileUrl = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
-          { folder: "cloudnotes_attachments", resource_type: "auto" },
+          {
+            folder: "cloudnotes_attachments",
+            resource_type: "auto", // Auto-detects PDFs, images, and raw documents
+            flags: "attachment"
+          },
           (error, result) => {
             if (error) reject(error);
             else resolve(result.secure_url);
@@ -187,6 +194,7 @@ app.patch('/api/notes/:id/pin', authenticateToken, async (req, res) => {
     await pool.query('UPDATE notes SET is_pinned = $1 WHERE id = $2 AND user_id = $3', [is_pinned, id, req.user.userId]);
     res.json({ message: "Pin status updated" });
   } catch (err) {
+    console.error("Pin note error:", err);
     res.status(500).json({ error: "Failed to update note." });
   }
 });
@@ -197,37 +205,78 @@ app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
     await pool.query('DELETE FROM notes WHERE id = $1 AND user_id = $2', [id, req.user.userId]);
     res.json({ message: "Note deleted successfully" });
   } catch (err) {
+    console.error("Delete note error:", err);
     res.status(500).json({ error: "Failed to delete note." });
   }
 });
 
-// Admin User Listing
+// --- ADMIN USER LIST ENDPOINT ---
 app.get('/api/users-list', async (req, res) => {
   const adminKey = req.query.key;
   const SECRET_ADMIN_KEY = process.env.ADMIN_KEY || 'mysecretadmin123';
 
   if (adminKey !== SECRET_ADMIN_KEY) {
-    return res.status(403).send('<h2 style="color: red; text-align: center; margin-top: 50px;">403 Access Denied</h2>');
+    return res.status(403).send('<h2 style="color: red; font-family: sans-serif; text-align: center; margin-top: 50px;">403 Access Denied: Unauthorized</h2>');
   }
 
   try {
     const users = await pool.query('SELECT id, full_name, email, dob, created_at FROM users ORDER BY id DESC');
+    
     let rows = users.rows.map(user => `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.id}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.full_name}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.email}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.dob ? new Date(user.dob).toLocaleDateString() : 'N/A'}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155;">${new Date(user.created_at).toLocaleString()}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155; font-weight: 600;">${user.full_name}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #38bdf8;">${user.email}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #a7f3d0;">${user.dob ? new Date(user.dob).toLocaleDateString() : 'N/A'}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #94a3b8;">${new Date(user.created_at).toLocaleString()}</td>
       </tr>
     `).join('');
 
-    res.send(`<html><body style="background:#0f172a;color:#fff;padding:40px;"><h2>Registered Users</h2><table border="1" style="width:100%;border-collapse:collapse;">${rows}</table></body></html>`);
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>CloudNotes - Admin User Directory</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; margin: 0; }
+          .container { max-width: 900px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+          h1 { margin-top: 0; color: #f8fafc; font-size: 24px; border-bottom: 2px solid #334155; padding-bottom: 15px; }
+          table { width: 100%; border-collapse: collapse; text-align: left; margin-top: 20px; }
+          th { padding: 12px; background: #334155; color: #94a3b8; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
+          tr:hover { background: #283548; }
+          .badge { background: #0284c7; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; float: right; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Registered Users <span class="badge">Total: ${users.rows.length}</span></h1>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>DOB</th>
+                <th>Joined Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="5" style="padding: 20px; text-align: center; color: #94a3b8;">No registered users found.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </body>
+      </html>
+    `;
+
+    res.send(html);
   } catch (err) {
-    res.status(500).send("Error: " + err.message);
+    res.status(500).send(`<h2 style="color: red; font-family: sans-serif;">Error fetching users: ${err.message}</h2>`);
   }
 });
 
+// Fallback Route to serve index.html for single-page routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
