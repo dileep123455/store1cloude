@@ -158,11 +158,11 @@ app.post('/api/notes', authenticateToken, upload.single('attachment'), async (re
     if (req.file) {
       const fileName = req.file.originalname.toLowerCase();
       
-      // Identify programming code files & plain scripts
-      const isCodeFile = /\.(py|c|cpp|cs|js|jsx|ts|tsx|java|html|css|json|sql|sh|rb|php|go|rs|txt)$/i.test(fileName);
+      // Check if file is a standard image
+      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(fileName);
       
-      // Force "raw" for code files, "auto" for images/PDFs
-      const resourceType = isCodeFile ? "raw" : "auto";
+      // Force 'raw' for PDFs, documents, and code files; 'image' for photos
+      const resourceType = isImage ? "image" : "raw";
 
       fileUrl = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
