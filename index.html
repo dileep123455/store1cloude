@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CloudNotes</title>
-  <!-- FontAwesome Icons -->
+  <!-- Google Fonts & FontAwesome Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -12,45 +15,56 @@
 
   <header class="app-header">
     <div class="logo-container">
-      <i class="fa-solid fa-cloud logo-icon"></i>
-      <h1>CloudNotes</h1>
+      <div class="logo-badge">
+        <i class="fa-solid fa-cloud-bolt logo-icon"></i>
+      </div>
+      <div>
+        <h1>CloudNotes</h1>
+        <p class="subtitle">Secure Cloud Workspace</p>
+      </div>
     </div>
-    <button id="logout-btn" class="btn-secondary" style="display: none;">
-      <i class="fa-solid fa-right-from-bracket"></i> Logout
+    <button id="logout-btn" class="btn-logout" style="display: none;">
+      <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
     </button>
   </header>
 
   <main class="main-content">
     
-    <!-- Authentication Card -->
+    <!-- Authentication View -->
     <div id="auth-container" class="card auth-card">
       <div class="auth-tabs">
-        <button id="tab-login" class="tab-btn active" onclick="switchTab('login')">Login</button>
-        <button id="tab-signup" class="tab-btn" onclick="switchTab('signup')">Sign Up</button>
+        <button id="tab-login" class="tab-btn active" onclick="switchTab('login')">
+          <i class="fa-solid fa-lock"></i> Login
+        </button>
+        <button id="tab-signup" class="tab-btn" onclick="switchTab('signup')">
+          <i class="fa-solid fa-user-plus"></i> Sign Up
+        </button>
       </div>
 
       <!-- Login Form -->
       <form id="login-form">
         <div class="form-group">
-          <label for="login-email">Email</label>
-          <input type="email" id="login-email" required placeholder="Enter email" />
+          <label for="login-email">Email Address</label>
+          <input type="email" id="login-email" required placeholder="name@example.com" />
         </div>
         <div class="form-group">
           <label for="login-password">Password</label>
-          <input type="password" id="login-password" required placeholder="Enter password" />
+          <input type="password" id="login-password" required placeholder="••••••••" />
         </div>
-        <button type="submit" class="btn-primary">Login</button>
+        <button type="submit" class="btn-primary">
+          <span>Sign In</span> <i class="fa-solid fa-arrow-right"></i>
+        </button>
       </form>
 
       <!-- Signup Form -->
       <form id="signup-form" class="hidden">
         <div class="form-group">
           <label for="signup-name">Full Name</label>
-          <input type="text" id="signup-name" required placeholder="Enter full name" />
+          <input type="text" id="signup-name" required placeholder="John Doe" />
         </div>
         <div class="form-group">
-          <label for="signup-email">Email</label>
-          <input type="email" id="signup-email" required placeholder="Enter email" />
+          <label for="signup-email">Email Address</label>
+          <input type="email" id="signup-email" required placeholder="name@example.com" />
         </div>
         <div class="form-group">
           <label for="signup-dob">Date of Birth</label>
@@ -58,43 +72,53 @@
         </div>
         <div class="form-group">
           <label for="signup-password">Password</label>
-          <input type="password" id="signup-password" required placeholder="Create password" />
+          <input type="password" id="signup-password" required placeholder="••••••••" />
         </div>
-        <button type="submit" class="btn-primary">Sign Up</button>
+        <button type="submit" class="btn-primary">
+          <span>Create Account</span> <i class="fa-solid fa-user-check"></i>
+        </button>
       </form>
     </div>
 
-    <!-- Notes Workspace -->
+    <!-- Main App Workspace -->
     <section id="notes-container" style="display: none;">
       
-      <!-- Create Note Form -->
+      <!-- Create Note Widget -->
       <div class="card create-note-card">
-        <h3><i class="fa-solid fa-pen-to-square"></i> Create Note</h3>
+        <div class="card-header-title">
+          <i class="fa-solid fa-wand-magic-sparkles highlight-icon"></i>
+          <h3>Create New Note</h3>
+        </div>
+
         <form id="note-form">
           <div class="form-group">
-            <input type="text" id="note-title" placeholder="Title" required />
+            <input type="text" id="note-title" placeholder="Note Title" required />
           </div>
           <div class="form-group">
-            <textarea id="note-content" placeholder="Take a note..." rows="3"></textarea>
+            <textarea id="note-content" placeholder="Write your thoughts, code snippets, or ideas here..." rows="3"></textarea>
           </div>
 
           <div class="form-row">
             <div class="form-group color-picker-group">
-              <label for="note-color">Card Color</label>
-              <input type="color" id="note-color" value="#1e293b" />
+              <label for="note-color">Theme Color</label>
+              <div class="color-picker-wrapper">
+                <input type="color" id="note-color" value="#1e293b" />
+              </div>
             </div>
 
             <div class="form-group file-group">
-              <label for="note-file"><i class="fa-solid fa-paperclip"></i> Attach File / Image</label>
-              <input type="file" id="note-file" accept="image/*,.pdf,.doc,.docx" />
+              <label for="note-file"><i class="fa-solid fa-paperclip"></i> Attach File / Code / Image</label>
+              <input type="file" id="note-file" accept="image/*,.pdf,.doc,.docx,.py,.c,.cpp,.js,.java,.html,.css,.json,.txt,.sql" />
             </div>
           </div>
 
-          <button type="submit" class="btn-primary">Save Note</button>
+          <button type="submit" class="btn-primary">
+            <i class="fa-solid fa-floppy-disk"></i> Save Note
+          </button>
         </form>
       </div>
 
-      <!-- Vertical Notes Container (One by One Stack) -->
+      <!-- Vertical Stack of Saved Notes -->
       <div id="notes-grid" class="notes-stack"></div>
 
     </section>
