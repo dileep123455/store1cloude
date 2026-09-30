@@ -1,285 +1,234 @@
-const express = require('express');
-const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const cors = require('cors');
-const path = require('path');
-const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-require('dotenv').config();
-
-const app = express();
-app.use(express.json());
-app.use(cors());
-
-// Serve static frontend files
-app.use(express.static(path.join(__dirname)));
-
-// Configure Cloudinary Credentials
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
-// Configure Multer Memory Storage with 10MB upload limit
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }
-});
-
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
-
-// PostgreSQL Pool Connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-// Initialize Database Tables & Migration
-const initDb = async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        full_name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS dob DATE;
-
-      CREATE TABLE IF NOT EXISTS notes (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        title VARCHAR(255) NOT NULL,
-        content TEXT,
-        color VARCHAR(20) DEFAULT '#1e293b',
-        is_pinned BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      ALTER TABLE notes ADD COLUMN IF NOT EXISTS file_url TEXT;
-    `);
-    console.log("Database initialized successfully with file attachment support.");
-  } catch (err) {
-    console.error("Database initialization error:", err);
-  }
-};
-initDb();
-
-// JWT Authentication Middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: "Access denied. No token provided." });
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: "Invalid or expired token." });
-    req.user = user;
-    next();
-  });
-};
-
-// --- AUTH ENDPOINTS ---
-app.post('/api/auth/signup', async (req, res) => {
-  const { name, email, dob, password } = req.body;
-  try {
-    const userCheck = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ error: "User already exists with this email." });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-    const userDob = dob && dob.trim() !== '' ? dob : null;
-
-    const newUser = await pool.query(
-      'INSERT INTO users (full_name, email, dob, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, full_name, email',
-      [name, email, userDob, passwordHash]
-    );
-
-    const user = newUser.rows[0];
-    const token = jwt.sign({ userId: user.id, name: user.full_name }, JWT_SECRET, { expiresIn: '7d' });
-
-    res.json({ message: "Registration successful!", token, user });
-  } catch (err) {
-    console.error("Signup error:", err);
-    res.status(500).json({ error: "Server error during signup: " + err.message });
+document.addEventListener('DOMContentLoaded', () => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    showNotesApp();
+  } else {
+    showAuth();
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
+// View Controllers
+function showAuth() {
+  document.getElementById('auth-container').classList.remove('hidden');
+  document.getElementById('notes-container').style.display = 'none';
+  document.getElementById('logout-btn').style.display = 'none';
+}
+
+function showNotesApp() {
+  document.getElementById('auth-container').classList.add('hidden');
+  document.getElementById('notes-container').style.display = 'block';
+  document.getElementById('logout-btn').style.display = 'flex';
+  loadNotes();
+}
+
+// User Sign Up
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('signup-name').value;
+  const email = document.getElementById('signup-email').value;
+  const dob = document.getElementById('signup-dob').value;
+  const password = document.getElementById('signup-password').value;
+
   try {
-    const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (userResult.rows.length === 0) {
-      return res.status(400).json({ error: "Invalid email or password." });
-    }
-
-    const user = userResult.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) {
-      return res.status(400).json({ error: "Invalid email or password." });
-    }
-
-    const token = jwt.sign({ userId: user.id, name: user.full_name }, JWT_SECRET, { expiresIn: '7d' });
-
-    res.json({
-      message: "Login successful!",
-      token,
-      user: { id: user.id, full_name: user.full_name, email: user.email }
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, dob, password })
     });
+
+    const data = await res.json();
+    if (res.ok) {
+      localStorage.setItem('token', data.token);
+      showNotesApp();
+    } else {
+      alert(data.error);
+    }
   } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ error: "Server error during login." });
+    alert('Signup error: ' + err.message);
   }
 });
 
-// --- NOTES ENDPOINTS ---
-app.get('/api/notes', authenticateToken, async (req, res) => {
+// User Login
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+
   try {
-    const notes = await pool.query(
-      'SELECT * FROM notes WHERE user_id = $1 ORDER BY is_pinned DESC, created_at DESC',
-      [req.user.userId]
-    );
-    res.json(notes.rows);
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      localStorage.setItem('token', data.token);
+      showNotesApp();
+    } else {
+      alert(data.error);
+    }
   } catch (err) {
-    console.error("Fetch notes error:", err);
-    res.status(500).json({ error: "Failed to fetch notes." });
+    alert('Login error: ' + err.message);
   }
 });
 
-// Create Note with Cloudinary Upload Stream (Supports Images, PDFs & Documents)
-app.post('/api/notes', authenticateToken, upload.single('attachment'), async (req, res) => {
-  const { title, content, color } = req.body;
-  let fileUrl = null;
+// Logout
+document.getElementById('logout-btn').addEventListener('click', () => {
+  localStorage.removeItem('token');
+  showAuth();
+});
 
+// Load Notes
+async function loadNotes() {
+  const token = localStorage.getItem('token');
   try {
-    if (req.file) {
-      fileUrl = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: "cloudnotes_attachments",
-            resource_type: "auto", // Auto-detects PDFs, images, and raw documents
-            flags: "attachment"
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result.secure_url);
-          }
-        );
-        stream.end(req.file.buffer);
-      });
+    const res = await fetch('/api/notes', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const notes = await res.json();
+
+    if (res.ok) {
+      renderNotes(notes);
+    } else if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem('token');
+      showAuth();
+    }
+  } catch (err) {
+    console.error("Error loading notes:", err);
+  }
+}
+
+// Render Notes
+function renderNotes(notes) {
+  const grid = document.getElementById('notes-grid');
+  grid.innerHTML = '';
+
+  if (!notes || notes.length === 0) {
+    grid.innerHTML = '<div style="text-align: center; color: #64748b; padding: 40px 0;"><i class="fa-regular fa-folder-open" style="font-size: 32px; margin-bottom: 12px;"></i><p>No notes found. Create your first note above!</p></div>';
+    return;
+  }
+
+  notes.forEach(note => {
+    const card = document.createElement('div');
+    card.className = 'note-card';
+    card.style.backgroundColor = note.color || '#1e293b';
+
+    // File Attachment Logic (Images, Code Files, Documents)
+    let attachmentHtml = '';
+    if (note.file_url) {
+      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(note.file_url);
+      const isCode = /\.(py|c|cpp|cs|js|jsx|ts|tsx|java|html|css|json|sql|sh|rb|php|go|rs|txt)$/i.test(note.file_url);
+
+      if (isImage) {
+        attachmentHtml = `<div class="note-attachment"><img src="${note.file_url}" alt="Attachment" /></div>`;
+      } else if (isCode) {
+        const fileName = note.file_url.split('/').pop();
+        attachmentHtml = `
+          <div class="note-attachment">
+            <a href="${note.file_url}" target="_blank" download class="attachment-badge">
+              <i class="fa-solid fa-code"></i> View / Download Code File (${fileName})
+            </a>
+          </div>`;
+      } else {
+        attachmentHtml = `
+          <div class="note-attachment">
+            <a href="${note.file_url}" target="_blank" class="attachment-badge">
+              <i class="fa-solid fa-file-lines"></i> View Document Attachment
+            </a>
+          </div>`;
+      }
     }
 
-    const newNote = await pool.query(
-      'INSERT INTO notes (user_id, title, content, color, file_url) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.user.userId, title, content, color || '#1e293b', fileUrl]
-    );
+    // Date Format
+    const formattedDate = note.created_at 
+      ? new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
 
-    res.json(newNote.rows[0]);
-  } catch (err) {
-    console.error("Save note error:", err);
-    res.status(500).json({ error: "Failed to save note: " + err.message });
-  }
-});
-
-app.patch('/api/notes/:id/pin', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const { is_pinned } = req.body;
-  try {
-    await pool.query('UPDATE notes SET is_pinned = $1 WHERE id = $2 AND user_id = $3', [is_pinned, id, req.user.userId]);
-    res.json({ message: "Pin status updated" });
-  } catch (err) {
-    console.error("Pin note error:", err);
-    res.status(500).json({ error: "Failed to update note." });
-  }
-});
-
-app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query('DELETE FROM notes WHERE id = $1 AND user_id = $2', [id, req.user.userId]);
-    res.json({ message: "Note deleted successfully" });
-  } catch (err) {
-    console.error("Delete note error:", err);
-    res.status(500).json({ error: "Failed to delete note." });
-  }
-});
-
-// --- ADMIN USER LIST ENDPOINT ---
-app.get('/api/users-list', async (req, res) => {
-  const adminKey = req.query.key;
-  const SECRET_ADMIN_KEY = process.env.ADMIN_KEY || 'mysecretadmin123';
-
-  if (adminKey !== SECRET_ADMIN_KEY) {
-    return res.status(403).send('<h2 style="color: red; font-family: sans-serif; text-align: center; margin-top: 50px;">403 Access Denied: Unauthorized</h2>');
-  }
-
-  try {
-    const users = await pool.query('SELECT id, full_name, email, dob, created_at FROM users ORDER BY id DESC');
-    
-    let rows = users.rows.map(user => `
-      <tr>
-        <td style="padding: 12px; border-bottom: 1px solid #334155;">${user.id}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155; font-weight: 600;">${user.full_name}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #38bdf8;">${user.email}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #a7f3d0;">${user.dob ? new Date(user.dob).toLocaleDateString() : 'N/A'}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #334155; color: #94a3b8;">${new Date(user.created_at).toLocaleString()}</td>
-      </tr>
-    `).join('');
-
-    const html = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>CloudNotes - Admin User Directory</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; margin: 0; }
-          .container { max-width: 900px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-          h1 { margin-top: 0; color: #f8fafc; font-size: 24px; border-bottom: 2px solid #334155; padding-bottom: 15px; }
-          table { width: 100%; border-collapse: collapse; text-align: left; margin-top: 20px; }
-          th { padding: 12px; background: #334155; color: #94a3b8; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
-          tr:hover { background: #283548; }
-          .badge { background: #0284c7; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; float: right; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>Registered Users <span class="badge">Total: ${users.rows.length}</span></h1>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Full Name</th>
-                <th>Email</th>
-                <th>DOB</th>
-                <th>Joined Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows || '<tr><td colspan="5" style="padding: 20px; text-align: center; color: #94a3b8;">No registered users found.</td></tr>'}
-            </tbody>
-          </table>
+    card.innerHTML = `
+      <div>
+        <div class="note-card-header">
+          <h4>${note.title}</h4>
+          <button class="pin-btn ${note.is_pinned ? 'pinned' : ''}" onclick="togglePin(${note.id}, ${!note.is_pinned})">
+            <i class="fa-solid fa-thumbtack"></i>
+          </button>
         </div>
-      </body>
-      </html>
+        <p>${note.content || ''}</p>
+        ${attachmentHtml}
+      </div>
+      <div class="note-card-footer">
+        <span class="note-date">${formattedDate}</span>
+        <div class="note-actions">
+          <button class="icon-btn danger" onclick="deleteNote(${note.id})">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      </div>
     `;
 
-    res.send(html);
+    grid.appendChild(card);
+  });
+}
+
+// Save Note with File
+document.getElementById('note-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const formData = new FormData();
+  formData.append('title', document.getElementById('note-title').value);
+  formData.append('content', document.getElementById('note-content').value);
+  formData.append('color', document.getElementById('note-color').value);
+
+  const fileInput = document.getElementById('note-file');
+  if (fileInput && fileInput.files[0]) {
+    formData.append('attachment', fileInput.files[0]);
+  }
+
+  const token = localStorage.getItem('token');
+
+  try {
+    const res = await fetch('/api/notes', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    });
+
+    if (res.ok) {
+      document.getElementById('note-form').reset();
+      document.getElementById('note-color').value = '#1e293b';
+      loadNotes();
+    } else {
+      const err = await res.json();
+      alert('Failed to save note: ' + err.error);
+    }
   } catch (err) {
-    res.status(500).send(`<h2 style="color: red; font-family: sans-serif;">Error fetching users: ${err.message}</h2>`);
+    alert('Error saving note: ' + err.message);
   }
 });
 
-// Fallback Route to serve index.html for single-page routing
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+// Toggle Pin
+async function togglePin(id, is_pinned) {
+  const token = localStorage.getItem('token');
+  await fetch(`/api/notes/${id}/pin`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ is_pinned })
+  });
+  loadNotes();
+}
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Delete Note
+async function deleteNote(id) {
+  if (!confirm('Are you sure you want to delete this note?')) return;
+  const token = localStorage.getItem('token');
+  await fetch(`/api/notes/${id}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  loadNotes();
+}
