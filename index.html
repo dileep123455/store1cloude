@@ -4,14 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CloudNotes</title>
-  <!-- FontAwesome for icons -->
+  <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <header class="app-header">
-    <h1>CloudNotes</h1>
+    <div class="logo-container">
+      <i class="fa-solid fa-cloud logo-icon"></i>
+      <h1>CloudNotes</h1>
+    </div>
     <button id="logout-btn" class="btn-secondary" style="display: none;">
       <i class="fa-solid fa-right-from-bracket"></i> Logout
     </button>
@@ -19,7 +22,7 @@
 
   <main class="main-content">
     
-    <!-- Authentication Card (Login / Signup) -->
+    <!-- Authentication Card -->
     <div id="auth-container" class="card auth-card">
       <div class="auth-tabs">
         <button id="tab-login" class="tab-btn active" onclick="switchTab('login')">Login</button>
@@ -61,9 +64,10 @@
       </form>
     </div>
 
-    <!-- Notes App Workspace -->
+    <!-- Notes Workspace -->
     <section id="notes-container" style="display: none;">
-      <!-- Note Creation Card -->
+      
+      <!-- Create Note Form -->
       <div class="card create-note-card">
         <h3><i class="fa-solid fa-pen-to-square"></i> Create Note</h3>
         <form id="note-form">
@@ -75,14 +79,13 @@
           </div>
 
           <div class="form-row">
-            <div class="form-group">
-              <label for="note-color">Color:</label>
+            <div class="form-group color-picker-group">
+              <label for="note-color">Card Color</label>
               <input type="color" id="note-color" value="#1e293b" />
             </div>
 
-            <!-- File Attachment Field -->
             <div class="form-group file-group">
-              <label for="note-file"><i class="fa-solid fa-paperclip"></i> Attach File / Image:</label>
+              <label for="note-file"><i class="fa-solid fa-paperclip"></i> Attach File / Image</label>
               <input type="file" id="note-file" accept="image/*,.pdf,.doc,.docx" />
             </div>
           </div>
@@ -91,13 +94,13 @@
         </form>
       </div>
 
-      <!-- Notes Grid -->
-      <div id="notes-grid" class="notes-grid"></div>
+      <!-- Vertical Notes Container (One by One Stack) -->
+      <div id="notes-grid" class="notes-stack"></div>
+
     </section>
 
   </main>
 
-  <!-- Tab Switcher Utility Script -->
   <script>
     function switchTab(tab) {
       const loginForm = document.getElementById('login-form');
@@ -119,7 +122,6 @@
     }
   </script>
 
-  <!-- Main JavaScript App Logic -->
   <script src="script.js"></script>
 
 </body>
