@@ -1,57 +1,14 @@
 // =========================================================================
-// 1. FIREBASE CONFIGURATION & INITIALIZATION
+// 1. BACKEND API CONFIGURATION
 // =========================================================================
 const API_BASE_URL = "https://store1cloude.onrender.com/api";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signOut,
-  updateProfile
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import {
-  getFirestore,
-  doc,
-  setDoc,
-  collection,
-  addDoc,
-  deleteDoc,
-  updateDoc,
-  query,
-  where,
-  onSnapshot,
-  serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// REPLACE WITH YOUR FIREBASE PROJECT CONFIGURATION
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
-
-// =========================================================================
-// 2. DOM ELEMENTS & APPLICATION STATE
-// =========================================================================
+// DOM Elements
 const authScreen = document.getElementById("auth-screen");
 const appDashboard = document.getElementById("app-dashboard");
 
 const loginForm = document.getElementById("login-form");
 const signupForm = document.getElementById("signup-form");
-const googleLoginBtn = document.getElementById("google-login-btn");
 const logoutBtn = document.getElementById("logout-btn");
 const userDisplayName = document.getElementById("user-display-name");
 
@@ -61,41 +18,36 @@ const addNoteBtn = document.getElementById("add-note-btn");
 const searchInput = document.getElementById("search-input");
 const notesGrid = document.getElementById("notes-grid");
 
-let currentUser = null;
-let notesUnsubscribe = null;
 let allNotes = [];
 let selectedNoteColor = "#1e293b";
 
 // =========================================================================
-// 3. AUTHENTICATION LOGIC
+// 2. APP INITIALIZATION & AUTH CHECK
 // =========================================================================
+document.addEventListener("DOMContentLoaded", () => {
+  checkAuthSession();
+});
 
-// Listen to auth state changes (Detect login/logout across sessions)
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    currentUser = user;
-    userDisplayName.textContent = `Welcome, ${user.displayName || "User"}`;
-    
-    // Switch Views
+function checkAuthSession() {
+  const token = localStorage.getItem("token");
+  const userName = localStorage.getItem("userName");
+
+  if (token && userName) {
+    userDisplayName.textContent = `Welcome, ${userName}`;
     authScreen.classList.add("hidden");
     appDashboard.classList.remove("hidden");
-
-    // Start listening for notes in real time
-    listenToNotes(user.uid);
+    fetchNotes();
   } else {
-    currentUser = null;
-    allNotes = [];
-    
-    // Unsubscribe from Firestore updates when logged out
-    if (notesUnsubscribe) notesUnsubscribe();
-
-    // Switch Views
     appDashboard.classList.add("hidden");
     authScreen.classList.remove("hidden");
   }
-});
+}
 
-// Sign Up with Email, Password, Name, and DOB
+// =========================================================================
+// 3. AUTHENTICATION (SIGN UP, LOGIN, LOGOUT)
+// =========================================================================
+
+// Sign Up
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = document.getElementById("signup-name").value.trim();
@@ -104,94 +56,108 @@ signupForm.addEventListener("submit", async (e) => {
   const password = document.getElementById("signup-password").value;
 
   try {
-    // 1. Create Auth Account
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    // 2. Update Auth Profile Display Name
-    await updateProfile(user, { displayName: name });
-
-    // 3. Save User Details (DOB, Name) to Firestore
-    await setDoc(doc(db, "users", user.uid), {
-      fullName: name,
-      email: email,
-      dateOfBirth: dob,
-      createdAt: serverTimestamp()
+    const res = await fetch(`${API_BASE_URL}/auth/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, dob, password })
     });
 
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Sign up failed.");
+
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("userName", data.user.full_name);
+
     signupForm.reset();
-  } catch (error) {
-    alert(`Registration Error: ${error.message}`);
+    checkAuthSession();
+  } catch (err) {
+    alert(`Registration Error: ${err.message}`);
   }
 });
 
-// Log In with Email & Password
+// Log In
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = document.getElementById("login-email").value.trim();
   const password = document.getElementById("login-password").value;
 
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Login failed.");
+
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("userName", data.user.full_name);
+
     loginForm.reset();
-  } catch (error) {
-    alert(`Login Failed: ${error.message}`);
-  }
-});
-
-// Google Sign-In
-googleLoginBtn.addEventListener("click", async () => {
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-
-    // Create user doc if signing in with Google for the first time
-    await setDoc(doc(db, "users", user.uid), {
-      fullName: user.displayName,
-      email: user.email,
-      createdAt: serverTimestamp()
-    }, { merge: true });
-
-  } catch (error) {
-    alert(`Google Sign-In Error: ${error.message}`);
+    checkAuthSession();
+  } catch (err) {
+    alert(`Login Error: ${err.message}`);
   }
 });
 
 // Log Out
 logoutBtn.addEventListener("click", () => {
-  signOut(auth);
+  localStorage.removeItem("token");
+  localStorage.removeItem("userName");
+  allNotes = [];
+  checkAuthSession();
 });
 
+// Tab Switcher
+window.switchTab = function(tab) {
+  const loginF = document.getElementById("login-form");
+  const signupF = document.getElementById("signup-form");
+  const tabLogin = document.getElementById("tab-login");
+  const tabSignup = document.getElementById("tab-signup");
+
+  if (tab === "login") {
+    loginF.classList.remove("hidden");
+    signupF.classList.add("hidden");
+    tabLogin.classList.add("active");
+    tabSignup.classList.remove("active");
+  } else {
+    signupF.classList.remove("hidden");
+    loginF.classList.add("hidden");
+    tabSignup.classList.add("active");
+    tabLogin.classList.remove("active");
+  }
+};
+
 // =========================================================================
-// 4. REAL-TIME FIRESTORE NOTE OPERATIONS
+// 4. NOTES MANAGEMENT (FETCH, ADD, PIN, DELETE)
 // =========================================================================
 
-// Listen to Firestore changes in real-time
-function listenToNotes(userId) {
-  const q = query(
-    collection(db, "notes"),
-    where("userId", "==", userId)
-  );
-
-  notesUnsubscribe = onSnapshot(q, (snapshot) => {
-    allNotes = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    // Sort notes: Pinned notes first, then by date created
-    allNotes.sort((a, b) => {
-      if (b.isPinned !== a.isPinned) return b.isPinned - a.isPinned;
-      return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-    });
-
-    renderNotes(allNotes);
-  }, (error) => {
-    console.error("Error loading notes: ", error);
-  });
+function getAuthHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${localStorage.getItem("token")}`
+  };
 }
 
-// Add New Note
+async function fetchNotes() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/notes`, {
+      headers: getAuthHeaders()
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      logoutBtn.click();
+      return;
+    }
+
+    allNotes = await res.json();
+    renderNotes(allNotes);
+  } catch (err) {
+    console.error("Failed to load notes:", err);
+  }
+}
+
 addNoteBtn.addEventListener("click", async () => {
   const title = noteTitleInput.value.trim();
   const content = noteContentInput.value.trim();
@@ -202,55 +168,63 @@ addNoteBtn.addEventListener("click", async () => {
   }
 
   try {
-    await addDoc(collection(db, "notes"), {
-      userId: currentUser.uid,
-      title: title || "Untitled Note",
-      content: content,
-      color: selectedNoteColor,
-      isPinned: false,
-      createdAt: serverTimestamp()
+    const res = await fetch(`${API_BASE_URL}/notes`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        title: title || "Untitled Note",
+        content: content,
+        color: selectedNoteColor
+      })
     });
 
-    // Reset input fields
+    if (!res.ok) throw new Error("Failed to save note.");
+
     noteTitleInput.value = "";
     noteContentInput.value = "";
     resetColorSelection();
-  } catch (error) {
-    alert(`Failed to save note: ${error.message}`);
+    fetchNotes();
+  } catch (err) {
+    alert(err.message);
   }
 });
 
-// Toggle Pin Status
 window.togglePinNote = async (noteId, currentStatus) => {
   try {
-    const noteRef = doc(db, "notes", noteId);
-    await updateDoc(noteRef, { isPinned: !currentStatus });
-  } catch (error) {
-    console.error("Pin update failed: ", error);
+    await fetch(`${API_BASE_URL}/notes/${noteId}/pin`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ is_pinned: !currentStatus })
+    });
+    fetchNotes();
+  } catch (err) {
+    console.error("Pin error:", err);
   }
 };
 
-// Delete Note
 window.deleteNote = async (noteId) => {
   if (confirm("Are you sure you want to delete this note?")) {
     try {
-      await deleteDoc(doc(db, "notes", noteId));
-    } catch (error) {
-      alert(`Delete error: ${error.message}`);
+      await fetch(`${API_BASE_URL}/notes/${noteId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders()
+      });
+      fetchNotes();
+    } catch (err) {
+      alert("Delete failed: " + err.message);
     }
   }
 };
 
 // =========================================================================
-// 5. UI & SEARCH HELPERS
+// 5. UI HELPERS & SEARCH
 // =========================================================================
 
-// Render notes to the grid
 function renderNotes(notesToDisplay) {
   notesGrid.innerHTML = "";
 
   if (notesToDisplay.length === 0) {
-    notesGrid.innerHTML = `<p style="color: var(--text-muted); grid-column: 1/-1;">No notes found. Take one above!</p>`;
+    notesGrid.innerHTML = `<p style="color: var(--text-muted); grid-column: 1/-1;">No notes saved yet.</p>`;
     return;
   }
 
@@ -259,15 +233,15 @@ function renderNotes(notesToDisplay) {
     noteCard.className = "note-card";
     noteCard.style.backgroundColor = note.color || "#1e293b";
 
-    const dateStr = note.createdAt?.seconds
-      ? new Date(note.createdAt.seconds * 1000).toLocaleDateString()
+    const dateStr = note.created_at
+      ? new Date(note.created_at).toLocaleDateString()
       : "Just now";
 
     noteCard.innerHTML = `
       <div>
         <div class="note-card-header">
           <h4>${escapeHTML(note.title)}</h4>
-          <button class="pin-btn ${note.isPinned ? 'active' : ''}" onclick="togglePinNote('${note.id}', ${note.isPinned})">
+          <button class="pin-btn ${note.is_pinned ? 'active' : ''}" onclick="togglePinNote(${note.id}, ${note.is_pinned})">
             <i class="fa-solid fa-thumbtack"></i>
           </button>
         </div>
@@ -276,7 +250,7 @@ function renderNotes(notesToDisplay) {
       <div class="note-card-footer">
         <span class="note-date">${dateStr}</span>
         <div class="note-actions">
-          <button class="icon-btn danger" onclick="deleteNote('${note.id}')">
+          <button class="icon-btn danger" onclick="deleteNote(${note.id})">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
@@ -287,17 +261,15 @@ function renderNotes(notesToDisplay) {
   });
 }
 
-// Live Search Filter
 searchInput.addEventListener("input", (e) => {
   const searchTerm = e.target.value.toLowerCase();
-  const filteredNotes = allNotes.filter(note => 
-    note.title.toLowerCase().includes(searchTerm) || 
-    note.content.toLowerCase().includes(searchTerm)
+  const filtered = allNotes.filter(n =>
+    n.title.toLowerCase().includes(searchTerm) ||
+    (n.content && n.content.toLowerCase().includes(searchTerm))
   );
-  renderNotes(filteredNotes);
+  renderNotes(filtered);
 });
 
-// Color Selection Logic
 document.querySelectorAll(".color-dot").forEach(dot => {
   dot.addEventListener("click", (e) => {
     document.querySelectorAll(".color-dot").forEach(d => d.classList.remove("active"));
@@ -315,9 +287,8 @@ function resetColorSelection() {
   }
 }
 
-// Prevent XSS attacks in rendered HTML
 function escapeHTML(str) {
-  return (str || "").replace(/[&<>'"]/g, 
+  return (str || "").replace(/[&<>'"]/g,
     tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
   );
 }
